@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>천둥감자 · 나의 로컬 AI</title>
+    <meta name="theme-color" content="#f7f2e7" />
+    <script>
+      const params = new URLSearchParams(location.search);
+      if (params.has("desktop")) document.documentElement.dataset.desktop = "true";
+      if (params.has("pet")) document.documentElement.dataset.pet = "true";
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>천둥감자 상태</title>
+  <style>
+    :root{font-family:"Malgun Gothic",sans-serif;color:#28492a;background:#e7f7cf}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;padding:12px 18px;border:1px solid #a8d188;background:#e7f7cf;display:flex;flex-direction:column}
+    header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-block-end:8px;border-block-end:1px solid #b5d99c}
+    h1{margin:0;color:#326d36;font-size:15px;font-weight:800;white-space:nowrap}
+    h1 span{color:#d99d23}
+    .server{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border:1px solid #a7d698;background:#d8efc4;color:#316b36;font-size:12px;font-weight:800;white-space:nowrap}
+    .dot{inline-size:8px;block-size:8px;flex:none;border-radius:50%;background:#a3a3a3}
+    .connected .dot{background:#4da64b;box-shadow:0 0 7px #62bf59}
+    .disconnected{color:#9e3931;background:#f6dfd6;border-color:#efb8ab}
+    .metrics{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin-block-start:8px;flex:1}
+    .metric{min-inline-size:0;padding:8px 12px;border:1px solid #bfdcaa;background:rgb(255 255 255 / .48)}
+    .label{display:block;margin-block-end:4px;color:#668965;font-size:11px;font-weight:700}
+    .value{display:block;color:#265b2f;font-size:18px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .meter{block-size:6px;margin-block-start:8px;background:#c4dda9;border-radius:999px;overflow:clip}
+    .fill{block-size:100%;inline-size:0;background:#60af50;transition:width .3s}
+  </style>
+</head>
+<body>
+  <header>
+    <h1><span aria-hidden="true">⚡</span> 천둥감자 모니터</h1>
+    <div id="server" class="server" aria-label="서버 연결 상태"><span class="dot" aria-hidden="true"></span><span id="server-text">확인 중</span></div>
+  </header>
+  <main class="metrics">
+    <section class="metric" aria-label="대화 모델"><span class="label">대화 모델</span><strong id="model" class="value">-</strong></section>
+    <section class="metric" aria-label="GPU 사용률"><span class="label">GPU 사용률</span><strong id="gpu" class="value">-</strong><div class="meter" role="progressbar" aria-label="GPU 사용률" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="fill" class="fill"></div></div></section>
+  </main>
+  <script>
+    const server = document.getElementById('server');
+    const serverText = document.getElementById('server-text');
+    const model = document.getElementById('model');
+    const gpu = document.getElementById('gpu');
+    const fill = document.getElementById('fill');
+    const meter = document.querySelector('[role="progressbar"]');
+    async function refresh() {
+      try {
+        const response = await fetch('/status', {cache:'no-store'});
+        if (!response.ok) throw new Error('서버 응답 없음');
+        const data = await response.json();
+        const connected = !!data.server_connected;
+        server.className = `server ${connected ? 'connected' : 'disconnected'}`;
+        serverText.textContent = connected ? '연결됨' : '연결 안 됨';
+        model.textContent = data.model || '-';
+        model.title = data.model || '';
+        const percent = Number.isFinite(data.gpu?.utilization_percent) ? Math.max(0, Math.min(100, data.gpu.utilization_percent)) : null;
+        gpu.textContent = percent === null ? '정보 없음' : `${percent}%`;
+        fill.style.width = `${percent || 0}%`;
+        meter.setAttribute('aria-valuenow', String(percent || 0));
+      } catch {
+        server.className = 'server disconnected';
+        serverText.textContent = '연결 안 됨';
+        model.textContent = '-';
+        gpu.textContent = '-';
+        fill.style.width = '0%';
+        meter.setAttribute('aria-valuenow', '0');
+      }
+    }
+    refresh();
+    setInterval(refresh, 5000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+html[data-pet],html[data-pet] body,html[data-pet] #app{height:100%;min-height:0}
+html[data-pet] .shell{height:100%;min-height:0;background:#f7f2e7}
+html[data-pet] .main,html[data-pet] .chat-area{height:100%;min-height:0}
+.pet-header{flex:none;padding:0 18px 12px;background:linear-gradient(145deg,#e6f3d8,#f7f2e7);border-bottom:1px solid #cbdcbf}
+.pet-title-row{display:flex;align-items:center;justify-content:space-between;gap:12px;height:42px}
+.pet-drag{font-size:12px;font-weight:900;color:#38643a;letter-spacing:.02em;cursor:move;user-select:none;padding:8px 10px 8px 0;flex:1}
+.pet-drag span{color:#d49f28}
+.pet-window-actions{display:flex;gap:5px}
+.pet-window-actions button{display:grid;place-items:center;min-width:28px;min-height:28px;border:1px solid #c7d7b9;border-radius:8px;background:#f6faed;color:#416640;font-size:17px;line-height:1}
+.pet-window-actions button:hover{background:#e4efd5}
+.pet-window-actions button:focus-visible,.pet-search input:focus-visible{outline:2px solid #347a3b;outline-offset:2px}
+.pet-hero{display:flex;align-items:center;gap:18px;min-height:120px;padding:8px 8px 12px}
+.pet-character{display:grid;place-items:center;flex:none;width:114px;height:114px;border:2px solid #a9c78e;border-radius:35% 43% 37% 45%;background:#f6e7bf;box-shadow:5px 6px 0 #cfe2bd;transform:rotate(-5deg)}
+.pet-character svg{transform:rotate(5deg)}
+.pet-character.thinking{background:#f1dbab;border-color:#81ad6c}
+.pet-hero-copy{display:flex;flex-direction:column;gap:7px;min-width:0}
+.pet-hero-copy strong{color:#315d35;font-size:22px;line-height:1.2}
+.pet-hero-copy span{color:#687e64;font-size:12px;line-height:1.5}
+.pet-search{display:inline-flex;align-items:center;gap:8px;margin-left:4px;padding:5px 9px;background:#e4efd6;border:1px solid #bbd3aa;border-radius:8px;color:#3e623d;font-size:11px;font-weight:700;cursor:pointer}
+.pet-search input{accent-color:#5b9a4a}
+.pet-search span:last-child{color:#65805e}
+.pet-preferences{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.pet-voice,.message-voice{min-height:28px;border:1px solid #bbd3aa;border-radius:8px;background:#e4efd6;color:#3e623d;font-size:11px;font-weight:700;padding:4px 9px}
+.pet-voice:hover,.message-voice:hover{background:#d8e9c8}
+.pet-voice:focus-visible,.message-voice:focus-visible{outline:2px solid #347a3b;outline-offset:2px}
+.message-voice{margin-left:7px;min-height:24px;padding:2px 6px;background:#f2f8e9}
+html[data-pet] .conversation{min-height:0;scrollbar-gutter:stable;background:#fffdf7}
+html[data-pet] .welcome{height:100%;display:grid;place-items:center;padding:22px;margin:0 auto;max-width:100%}
+.pet-welcome{max-width:220px;color:#7a8b72;font-size:14px;line-height:1.7;text-align:center}
+html[data-pet] .message-list{max-width:100%;margin:0;padding:20px 16px 32px}
+html[data-pet] .message-row{gap:9px;margin-bottom:17px}
+html[data-pet] .message-row.user .message-content{max-width:88%;padding:9px 12px}
+html[data-pet] .message-row.assistant .message-content,html[data-pet] .message-row.error .message-content{max-width:calc(100% - 40px)}
+html[data-pet] .message-text{font-size:13px;line-height:1.6}
+html[data-pet] .composer-wrap{padding:11px 13px 14px;background:#f7f2e7;border-top:1px solid #e4e9d9}
+html[data-pet] .composer{padding:9px 11px 8px;border-radius:16px;box-shadow:0 3px 0 #d4e0c7}
+html[data-pet] .composer textarea{min-height:48px;max-height:100px;font-size:13px}
+html[data-pet] .composer-actions{gap:7px}
+html[data-pet] .composer-actions>span{display:none}
+html[data-pet] .attach-button{padding:5px 7px}
+html[data-pet] .send{min-width:30px;min-height:30px}
+@media (prefers-reduced-motion:no-preference){.pet-character:hover{transition:transform .2s ease;transform:rotate(0deg) translateY(-4px)}}

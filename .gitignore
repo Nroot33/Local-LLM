@@ -1,0 +1,28 @@
+# 개인 설정과 로컬 데이터
+personal-instructions.txt
+.env
+.env.*
+*.key
+*.pem
+*tavily-key*
+
+# Python 실행 환경과 임시 파일
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# 프런트엔드 설치 및 빌드 결과
+web/node_modules/
+web/dist/
+dist/
+build/
+*.spec
+*.log
+work/
+
+# 운영체제 및 편집기 파일
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
