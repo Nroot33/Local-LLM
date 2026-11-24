@@ -1,39 +1,32 @@
-# 천둥감자 로컬 AI
+# 천둥감자 🥔⚡
 
-천둥감자는 PC에서 실행되는 Ollama `qwen3:8b`와 Vue 채팅 화면으로 구성됩니다. 일반 텍스트 요청은 로컬 모델이 직접 도구를 선택합니다. 모델이 도구 호출을 반환하면 FastAPI 서버가 PC에서 실행하고, 실행 결과를 모델에 다시 전달합니다. Codex는 평소 채팅 요청 처리에 참여하지 않습니다.
+내 PC에서 쓰려고 만든 Qwen 데스크톱 앱입니다. 대화는 Ollama로 돌리고, 필요할 때 사진을 읽거나 웹을 검색합니다. 파일 작성과 PC 조작도 대화창에서 요청할 수 있습니다.
 
-## 현재 연결된 도구
+화면은 Vue, 서버는 FastAPI로 만들었습니다. Tavily 키를 설정하면 웹 검색에 사용하고, 음성 답변은 별도로 설치한 MeloTTS로 생성합니다.
 
-- 바탕화면 또는 문서 폴더에 HTML, CSS, JS, TXT, Markdown, JSON, CSV, Python, PowerShell 텍스트 파일 새로 만들기
-- 같은 폴더의 텍스트 파일 읽기와 파일 목록 확인하기
-- 바탕화면에 PDF, DOCX, Markdown, TXT 문서 만들기
-- 웹 검색을 켠 경우 Tavily 검색 또는 대전 현재 날씨 조회하기
-- 현재 Windows 사용자 권한으로 콘솔 명령 실행 및 GUI 프로그램 열기
-- 열린 앱 화면을 로컬 비전 모델로 확인하고 마우스 클릭·스크롤·키보드 단축키·한글 입력하기
-- 카카오톡에서 지정한 대화방을 검색해 창 제목을 확인한 뒤 메시지를 전송하기
+## Windows에서 실행하기
 
-파일을 만들라는 명령에는 모델이 쓰기 도구를 호출해야 합니다. 도구가 성공하지 않으면 파일을 만들었다고 답하지 않습니다. 파일 생성 전용 도구는 기존 파일을 덮어쓰지 않고 새 이름으로 저장합니다. PC 도구는 이 PC에서 `127.0.0.1`로 접속할 때만 사용할 수 있습니다. 명령 실행 도구는 현재 사용자 권한으로 동작하며 Windows 관리자 권한을 자동으로 얻지 않습니다. 명령 실행을 통해 현재 사용자에게 허용된 파일 작업도 가능하므로 실행 요청은 구체적으로 적어 주세요.
-
-## 실행과 접속
-
-### Windows 데스크톱 앱
-
-`dist\천둥감자.exe`를 실행하면 브라우저나 PowerShell 창 없이 감자 캐릭터가 있는 작은 펫형 대화창과 오른쪽 위 상태 창이 열립니다. 대화창 상단을 끌어 위치를 옮길 수 있고, 창 안의 버튼으로 최소화하거나 종료할 수 있습니다. 상태 창에는 서버 연결, 대화 모델, GPU 사용률만 표시됩니다. 예약 작업의 서버가 실행 중이면 재사용하고, 꺼져 있으면 앱이 자체 서버를 시작합니다. Ollama와 모델은 PC에 설치되어 있어야 합니다. 처음 실행할 때는 실행 파일 압축 해제 때문에 창이 뜨기까지 시간이 걸릴 수 있습니다.
-
-데스크톱 앱을 다시 빌드하려면 이 폴더에서 `./build-desktop.ps1`을 실행합니다. Python 데스크톱 의존성은 `requirements-desktop.txt`에 정의되어 있습니다. 앱 실행 로그는 `%LOCALAPPDATA%\ThunderPotato\desktop.log`에서 확인할 수 있습니다.
-
-Windows 로그인 시 `ThunderPotato-LocalAI` 예약 작업이 서버를 백그라운드로 시작합니다. 평소에는 PowerShell 창이나 별도의 Vue 개발 서버를 열 필요가 없습니다. PC에서는 `http://127.0.0.1:8000/`로 접속합니다. 휴대폰에서는 같은 네트워크의 PC 주소로 접속해 사진을 찍어 전송할 수 있지만, 파일 도구는 사용할 수 없습니다.
-
-서버를 직접 실행해야 할 때는 이 폴더에서 다음 명령을 사용합니다.
+먼저 [Ollama](https://ollama.com/)를 설치하고 사용할 모델을 받습니다.
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn app:app --host 127.0.0.1 --port 8000
+ollama pull qwen3:8b
+ollama pull qwen3-vl:4b-instruct
 ```
 
-소스를 바꾼 경우 Vue 파일은 `web` 폴더에서 `npm run build`로 빌드합니다. Python 의존성은 `.\.venv\Scripts\python.exe -m pip install -r requirements.txt`로 설치합니다.
+이 폴더에서 의존성을 설치하고 실행 파일을 만듭니다. Python과 Node.js가 필요합니다.
 
-## 대화와 이미지
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-desktop.txt
+New-Item personal-instructions.txt -ItemType File -ErrorAction SilentlyContinue
+cd web
+npm ci
+npm run build
+cd ..
+.\build-desktop.ps1
+.\dist\천둥감자.exe
+```
 
-텍스트 대화에는 서버의 `personal-instructions.txt`와 최근 대화 내용이 함께 전달됩니다. 이미지 분석에는 `qwen3-vl:4b-instruct`를 사용합니다. 이미지 문제는 OCR 후 답변하며, 일부 지원되는 수학 문제는 계산 코드로 검산합니다. 작은 로컬 모델의 추론과 OCR은 틀릴 수 있습니다.
+`personal-instructions.txt`에는 원하는 답변 방식을 적으면 됩니다. 개인 설정과 API 키는 GitHub에 올리지 않습니다. MeloTTS 음성을 쓰려면 별도 Python 환경에 MeloTTS를 설치해야 합니다.
 
-웹 검색 키는 `%LOCALAPPDATA%\ThunderPotato\tavily-key.xml`에 Windows 계정으로 암호화되어 저장됩니다. 검색을 켜면 검색어가 외부 검색 서비스로 전송됩니다. 이 서버에는 로그인 기능이 없으므로 인터넷에 직접 공개하지 마세요.
+이 앱은 개인 PC에서 사용하도록 만들었습니다. PC 조작 기능은 현재 로그인한 Windows 사용자 권한으로 실행됩니다.
