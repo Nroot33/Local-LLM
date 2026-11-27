@@ -270,27 +270,29 @@ async def chat(request: ChatRequest, http_request: Request):
                     choice_instruction = "객관식이면 보기 번호와 값(예: ③ 3)을 함께 적으세요." if has_choices else "선지가 없으므로 ①, ② 같은 보기 번호를 절대 쓰지 마세요."
                     system = f"한국어로 답하세요. 최종 정답만 한 줄로 출력하세요. {choice_instruction} 풀이 과정이나 설명은 출력하지 마세요."
                     user_message = {"role": "user", "content": f"이미지에서 전사한 문제:\n{transcription}\n\n사용자 요청: {request.message or '정답만 알려줘'}\n\n{choice_instruction} 최종 값만 말해줘."}
-            response = await client.post(
-                f"{OLLAMA_URL}/api/chat",
-                json={
-                    "model": selected_model,
-                    "stream": False,
-                    "think": False,
-                    "options": {"num_predict": 256} if math_image else {},
-                    "messages": [
-                        {"role": "system", "content": system + f"\n\n사용자 기본 지침:\n{load_personal_instructions()}" + (f"\n\n이 요청에만 적용할 추가 지침:\n{request.personal_instructions.strip()}" if request.personal_instructions.strip() else "")},
-                        *[
-                            {"role": item["role"], "content": item["content"][:1200]}
-                            for item in request.history
-                            if item.get("role") in ("user", "assistant") and isinstance(item.get("content"), str)
-                        ][-12:],
-                        user_message,
-                    ],
-                },
-            )
+            chat_payload = {
+                "model": selected_model,
+                "stream": False,
+                "think": bool(math_image and selected_model == MODEL),
+                "options": {"num_predict": 1536} if math_image else {},
+                "messages": [
+                    {"role": "system", "content": system + f"\n\n사용자 기본 지침:\n{load_personal_instructions()}" + (f"\n\n이 요청에만 적용할 추가 지침:\n{request.personal_instructions.strip()}" if request.personal_instructions.strip() else "")},
+                    *[
+                        {"role": item["role"], "content": item["content"][:1200]}
+                        for item in request.history
+                        if item.get("role") in ("user", "assistant") and isinstance(item.get("content"), str)
+                    ][-12:],
+                    user_message,
+                ],
+            }
+            response = await client.post(f"{OLLAMA_URL}/api/chat", json=chat_payload)
             response.raise_for_status()
-            if math_image and response.json().get("done_reason") == "length":
-                raise ValueError("짧은 답변도 길이 제한에 걸렸습니다. 다시 시도해 주세요.")
+            if math_image and (response.json().get("done_reason") == "length" or not response.json()["message"].get("content", "").strip()):
+                # 생각 토큰만 쓰고 끝난 경우 최종 답변을 짧게 다시 요청한다.
+                chat_payload["think"] = False
+                chat_payload["options"] = {"num_predict": 256}
+                response = await client.post(f"{OLLAMA_URL}/api/chat", json=chat_payload)
+                response.raise_for_status()
         answer = response.json()["message"]["content"]
         if not answer.strip():
             raise ValueError("모델이 빈 답변을 반환했습니다. 다시 시도해 주세요.")

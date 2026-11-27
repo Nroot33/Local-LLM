@@ -5,6 +5,7 @@ import re
 import subprocess
 import shutil
 import winreg
+import zipfile
 from urllib.parse import quote, unquote_to_bytes
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +20,39 @@ from kakao_tools import resolve_kakao_recipient, send_kakao_message
 
 
 TEXT_SUFFIXES = {".html", ".htm", ".css", ".js", ".json", ".txt", ".md", ".csv", ".py", ".ps1"}
+
+
+def should_think(message: str) -> bool:
+    # 단순 실행 명령은 빠르게 처리하고, 내용 생성과 추론에는 생각 모드를 쓴다.
+    if is_program_execution_request(message) and not is_file_creation_request(message):
+        return False
+    if re.search(r"카톡|카카오톡|클릭|스크롤|키보드|마우스|화면을\s*봐", message, re.I):
+        return False
+    return bool(is_file_creation_request(message) or re.search(
+        r"수학|계산|증명|추론|분석|비교|평가|검토|원인|왜\b|어떻게|설계|코딩|코드|구현|계획|해석|판단|문제|정답|검증",
+        message, re.I,
+    ) or len(message) >= 120)
+
+
+def verify_saved_file(path: str, expected_text: str | None = None) -> dict:
+    # 모델의 성공 주장 대신 실제 파일과 형식을 다시 읽어 확인한다.
+    try:
+        target = Path(path)
+        if not target.is_file() or target.stat().st_size == 0:
+            raise ValueError("저장된 파일이 없거나 비어 있습니다.")
+        if expected_text is not None and target.read_text(encoding="utf-8") != expected_text:
+            raise ValueError("저장된 내용이 요청한 내용과 다릅니다.")
+        if target.suffix.lower() == ".pdf":
+            from pypdf import PdfReader
+            if not PdfReader(str(target)).pages:
+                raise ValueError("PDF에 페이지가 없습니다.")
+        elif target.suffix.lower() == ".docx":
+            with zipfile.ZipFile(target) as archive:
+                if archive.testzip() is not None or "word/document.xml" not in archive.namelist():
+                    raise ValueError("DOCX 파일이 손상됐습니다.")
+        return {"ok": True, "path": str(target), "size_bytes": target.stat().st_size}
+    except Exception as exc:
+        return {"ok": False, "error": f"파일 검증 실패: {exc}"}
 
 
 def is_file_creation_request(message: str) -> bool:
@@ -308,7 +342,11 @@ def run_program(arguments: dict) -> dict:
         capture_output=True, text=True, errors="replace", timeout=timeout,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), check=False,
     )
-    return {"ok": True, "exit_code": result.returncode, "stdout": result.stdout[-10000:], "stderr": result.stderr[-5000:]}
+    output = {"ok": result.returncode == 0, "exit_code": result.returncode,
+              "stdout": result.stdout[-10000:], "stderr": result.stderr[-5000:]}
+    if result.returncode != 0:
+        output["error"] = f"명령이 종료 코드 {result.returncode}로 실패했습니다. {(result.stderr or result.stdout).strip()[-1000:]}".strip()
+    return output
 
 
 def launch_application(arguments: dict) -> dict:
@@ -370,12 +408,14 @@ async def execute_tool(name: str, arguments: dict, user_message: str, tavily_key
             return {"ok": False, "error": "웹 검색이 꺼져 있습니다."}, None
         if name == "write_text_file":
             path = write_text_file(arguments.get("path", ""), arguments.get("content", ""))
-            return {"ok": True, "path": path}, path
+            result = verify_saved_file(path, arguments.get("content", ""))
+            return result, path if result["ok"] else None
         if name == "create_document":
             file_format = arguments.get("format", "")
             content = CAPABILITIES_MARKDOWN if asks_about_capabilities(user_message) else arguments.get("content", "")
             path = str(save_document(content, file_format, capabilities=asks_about_capabilities(user_message)))
-            return {"ok": True, "path": path}, path
+            result = verify_saved_file(path)
+            return result, path if result["ok"] else None
         if name == "read_text_file":
             return {"ok": True, "content": read_text_file(arguments.get("path", ""))}, None
         if name == "list_files":
@@ -383,7 +423,8 @@ async def execute_tool(name: str, arguments: dict, user_message: str, tavily_key
         if name == "get_capabilities":
             return {"ok": True, "content": CAPABILITIES_MARKDOWN}, None
         if name == "search_web":
-            return {"ok": True, "results": await search_web(arguments.get("query", ""), tavily_key)}, None
+            results = await search_web(arguments.get("query", ""), tavily_key)
+            return ({"ok": True, "results": results} if results else {"ok": False, "error": "검색 결과가 없습니다."}), None
         if name == "get_daejeon_weather":
             return {"ok": True, "weather": await get_daejeon_weather()}, None
         if name == "run_program":
@@ -467,15 +508,20 @@ async def run_local_agent(message: str, history: list[dict[str, str]], personal_
     browser_search_intent = bool(re.search(r"크롬|chrome", message, re.I) and re.search(r"검색", message))
     followup_intent = bool(re.search(r"열어서|실행해서|켜서|접속|검색", message) and execution_intent)
     kakao_send_intent = bool(re.search(r"카톡|카카오톡|kakaotalk", message, re.I) and re.search(r"답해|답장|보내", message))
+    thinking = should_think(message)
     executed_actions = []
     completed_tasks = []
     gui_results = []
     screen_inspected = False
+    screen_checked_after_action = False
+    gui_action_done = False
     sent_message = False
     sent_result = None
     async with httpx.AsyncClient(timeout=330) as client:
         for turn in range(12):
-            response = await client.post(f"{ollama_url}/api/chat", json={"model": model, "stream": False, "think": False, "options": {"num_predict": 6000}, "messages": messages, "tools": definitions})
+            response = await client.post(f"{ollama_url}/api/chat", json={"model": model, "stream": False,
+                "think": thinking, "options": {"num_predict": 6000 if file_intent else (2048 if thinking else 1024)},
+                "messages": messages, "tools": definitions})
             response.raise_for_status()
             assistant = response.json()["message"]
             calls = assistant.get("tool_calls") or []
@@ -502,6 +548,8 @@ async def run_local_agent(message: str, history: list[dict[str, str]], personal_
                         result, saved_path = await execute_tool(name, arguments, message, tavily_key, allow_search, allow_files, file_intent, vision_model, ollama_url)
                     if not result.get("ok"):
                         last_tool_error = result.get("error", "도구 실행 오류")
+                    else:
+                        last_tool_error = None
                     if saved_path:
                         saved_paths.append(saved_path)
                     if name in ("run_program", "launch_application", "open_putty_session", "search_in_browser") and result.get("ok"):
@@ -513,8 +561,12 @@ async def run_local_agent(message: str, history: list[dict[str, str]], personal_
                         sent_result = result
                     if name == "inspect_screen" and result.get("ok"):
                         screen_inspected = True
+                        if gui_action_done:
+                            screen_checked_after_action = True
                         gui_results.append(result)
                     if name in ("mouse_click", "mouse_scroll", "keyboard_press", "keyboard_type") and result.get("ok"):
+                        gui_action_done = True
+                        screen_checked_after_action = False
                         gui_results.append(result)
                     if name in ("search_web", "get_daejeon_weather") and result.get("ok"):
                         used_search = True
@@ -539,10 +591,23 @@ async def run_local_agent(message: str, history: list[dict[str, str]], personal_
             if sent_result:
                 return {"answer": f"카카오톡 '{sent_result['recipient']}' 대화방에 메시지를 보냈습니다: {sent_result['message']}", "model": model, "searched": used_search, "fast_math": False, "message_sent": True}
             if gui_results:
+                if gui_action_done and not screen_checked_after_action:
+                    try:
+                        checked = await inspect_screen(
+                            f"사용자 요청: {message[:300]}. 방금 화면 조작을 수행했다. 현재 화면에서 결과가 실제로 확인되는지 설명하고, 확인할 수 없으면 그렇게 말해줘.",
+                            vision_model, ollama_url,
+                        )
+                        if checked.get("ok"):
+                            gui_results.append(checked)
+                            screen_checked_after_action = True
+                    except (OSError, ValueError, httpx.HTTPError) as exc:
+                        last_tool_error = f"조작 후 화면 확인 실패: {exc}"
                 inspected = next((item["description"] for item in reversed(gui_results) if "description" in item), "")
-                controlled = any("description" not in item for item in gui_results)
-                report = ("화면 조작을 완료했습니다.\n" + inspected if controlled else inspected) or answer
-                return {"answer": report, "model": model, "searched": used_search, "fast_math": False, "screen_controlled": controlled}
+                if gui_action_done:
+                    report = ("화면 조작 후 확인 결과:\n" + inspected) if screen_checked_after_action else f"조작 명령은 전달했지만 결과를 화면에서 확인하지 못했습니다. {last_tool_error or ''}"
+                else:
+                    report = inspected or answer
+                return {"answer": report.strip(), "model": model, "searched": used_search, "fast_math": False, "screen_controlled": gui_action_done, "screen_rechecked": screen_checked_after_action}
             if executed_actions:
                 last_action = executed_actions[-1]
                 if "session" in last_action:
@@ -574,7 +639,17 @@ async def run_local_agent(message: str, history: list[dict[str, str]], personal_
             return {"answer": f"카카오톡 답장을 보내지 못했습니다: {last_tool_error or '전송 동작이 확인되지 않았습니다.'}", "model": model, "searched": used_search, "fast_math": False}
         if followup_intent and not completed_tasks and not any("description" not in item for item in gui_results):
             return {"answer": f"화면은 확인했지만 요청한 조작은 완료하지 못했습니다: {last_tool_error or '조작 도구가 호출되지 않았습니다.'}", "model": model, "searched": used_search, "fast_math": False}
-        return {"answer": gui_results[-1].get("description") or "화면 조작을 완료했습니다.", "model": model, "searched": used_search, "fast_math": False, "screen_controlled": any("description" not in item for item in gui_results)}
+        if gui_action_done and not screen_checked_after_action:
+            try:
+                checked = await inspect_screen(f"사용자 요청: {message[:300]}. 방금 화면 조작을 수행했다. 현재 결과가 보이는지 확인해줘.", vision_model, ollama_url)
+                if checked.get("ok"):
+                    gui_results.append(checked)
+                    screen_checked_after_action = True
+            except (OSError, ValueError, httpx.HTTPError) as exc:
+                last_tool_error = f"조작 후 화면 확인 실패: {exc}"
+        inspected = next((item["description"] for item in reversed(gui_results) if "description" in item), "")
+        report = f"화면 조작 후 확인 결과:\n{inspected}" if gui_action_done and screen_checked_after_action else (f"조작 명령은 전달했지만 결과를 화면에서 확인하지 못했습니다. {last_tool_error or ''}" if gui_action_done else inspected)
+        return {"answer": report.strip(), "model": model, "searched": used_search, "fast_math": False, "screen_controlled": gui_action_done, "screen_rechecked": screen_checked_after_action}
     if executed_actions:
         last_action = executed_actions[-1]
         if kakao_send_intent and not sent_message:
